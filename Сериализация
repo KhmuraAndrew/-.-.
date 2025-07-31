@@ -1,0 +1,94 @@
+import heapq
+import time
+from collections import defaultdict
+
+
+class RoadNetwork:
+    def __init__(self):
+        self.graph = defaultdict(list)
+        self.nodes = {}
+
+    def add_node(self, node_id, lat, lon, adress):
+        self.nodes[node_id] = {'lat': lat, 'lon': lon, 'adress': adress}
+        print(f'Точка {adress} добавлена!')
+
+    def add_edge(self, src, dest, base_distance, road_type):
+        self.graph[src].append((dest, base_distance, road_type))
+        self.graph[dest].append((src, base_distance, road_type))
+
+    def adjust_weight(self, base_distance, road_type, traffic_factor, use_toll):
+        multipliers = {
+            0: 1.0,
+            1: 1.3,
+            2: traffic_factor,
+            3: 0.7 if use_toll else float('inf'),
+        }
+
+        return base_distance * multipliers.get(road_type, 1.0)
+
+    def find_optimal_route(self, start, end, traffic_factor=2.0, use_toll=True, truck_type='medium'):
+        distances = {node: float('inf') for node in self.nodes}
+        prev = {node: None for node in self.nodes}
+        distances[start] = 0
+
+        truck_multiplier = 1.2 if truck_type == 'large' else 1.0
+
+        heap = [(0, start)]
+
+        while heap:
+            current_distance, current_node = heapq.heappop(heap)
+
+            if current_distance > distances[current_node]:
+                continue
+            if current_node == end:
+                break
+
+            for neighbor, base_distance, road_type in self.graph[current_node]:
+                adjusted_distance = self.adjust_weight(base_distance, road_type, traffic_factor, use_toll)
+
+                new_distance = current_distance + adjusted_distance * truck_multiplier
+
+                if new_distance < distances[neighbor]:
+                    distances[neighbor] = new_distance
+                    prev[neighbor] = current_node
+                    heapq.heappush(heap, (new_distance, neighbor))
+
+        route = []
+        current = end
+
+        while current:
+            route.append({
+                'node': current,
+                'adress': self.nodes[current]['adress'],
+                'coords': (self.nodes[current]['lat'], self.nodes[current]['lon'])
+            })
+            current = prev[current]
+        route.reverse()
+
+        return {
+            'total_distance': round(distances[end], 1),
+            'route': route
+        }
+
+
+network = RoadNetwork()
+
+network.add_node(1, 55.751244, 37.618423, "Москва, Кремль")
+network.add_node(2, 55.763337, 37.565466, "Москва, Тверская ул, 1")
+network.add_node(3, 55.733768, 37.588792, "Москва, Павелецкая пл")
+network.add_node(4, 55.774838, 37.632632, "Москва, Садовое кольцо")
+network.add_node(5, 55.757645, 37.621857, "Москва, Красная площадь")
+
+network.add_edge(1, 2, 15.0, 1)  # Городская дорога
+network.add_edge(2, 3, 8.0, 2)   # Дорога с пробками
+network.add_edge(3, 4, 20.0, 0)  # Трасса
+network.add_edge(4, 5, 6.0, 3)   # Платная дорога
+network.add_edge(1, 5, 10.0, 1)  # Городская дорога
+#network.add_edge(1, 4, 1.0, 0)
+
+result = network.find_optimal_route(1, 3, traffic_factor=1.8, use_toll=True, truck_type='large')
+
+print(f'Общее расстояние: {result["total_distance"]} км')
+print('Маршрут:')
+for i, point in enumerate(result['route'], start=1):
+    print(f'{i}. {point["adress"]}')
